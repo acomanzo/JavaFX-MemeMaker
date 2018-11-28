@@ -13,6 +13,7 @@ import javafx.scene.effect.MotionBlur;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
@@ -41,6 +42,9 @@ public class MemeMaker extends Application {
 
     void makeStage(Stage stage)
     {
+        //variable for the radius of the brush
+        double brushRadius = 25.0;
+
         Image image = null;
         ImageView imageView = null;
 
@@ -72,7 +76,21 @@ public class MemeMaker extends Application {
         //we set the prefSize to center the image and prevent the text from pushing the image
         pane.setPrefSize(imageView.getFitWidth(), imageView.getFitWidth() * image.getHeight() / image.getWidth());
 
-        //add an event handler for the imageView that prompts the user to
+        //add event handler to draw when the mouse is pressed
+        pane.setOnMouseDragged(event ->
+        {
+            //get mouse coordinates
+            double mouseX = event.getSceneX() - pane.getLayoutX();
+            double mouseY = event.getSceneY() - pane.getLayoutY();
+
+            //make a circle object
+            Circle circle = new Circle(mouseX, mouseY, brushRadius);
+
+            //add the object to the pane
+            pane.getChildren().add(circle);
+        });
+
+        //add an event handler for the pane to add the text from the TextArea when clicked
         imageView.setOnMouseClicked(event ->
         {
             System.out.println("Clicked imageView");
@@ -105,6 +123,7 @@ public class MemeMaker extends Application {
         MenuItem newItem = new MenuItem("New");
         MenuItem resetItem = new MenuItem("Reset");
         MenuItem saveItem = new MenuItem("Save");
+        MenuItem undoItem = new MenuItem("Undo");
 
         //add an event handler for the newItem
         newItem.setOnAction(event ->
@@ -164,8 +183,14 @@ public class MemeMaker extends Application {
             }*/
         });
 
+        //add an event handler for the undo item
+        undoItem.setOnAction(event ->
+        {
+            removeDrawing(pane.getChildren().size(), pane);
+        });
+
         //add the MenuItem's to the fileMenu
-        fileMenu.getItems().addAll(newItem, resetItem, saveItem);
+        fileMenu.getItems().addAll(newItem, resetItem, saveItem, undoItem);
 
         //add the fileMenu to the menuBar
         menuBar.getMenus().add(fileMenu);
@@ -363,5 +388,21 @@ public class MemeMaker extends Application {
         stage.setScene(scene);
         stage.setTitle("Meme-it!");
         stage.show();
+    }
+
+    //make a recursive method to remove "drawn" circles with the brush
+    void removeDrawing(int index, Pane pane)
+    {
+        if(pane.getChildren().size() > 1) // if the Pane holds something other than the ImageView
+        {
+            if(pane.getChildren().get(index - 1) instanceof Circle) // check if you're removing a circle
+            {
+                if(pane.getChildren().get(index - 2) instanceof Circle) // check if the next item in the list is a circle
+                {
+                    removeDrawing(index - 1, pane); // call the method
+                }
+            }
+            pane.getChildren().remove(pane.getChildren().size() - 1); // remove the first item in the list
+        }
     }
 }
