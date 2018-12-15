@@ -1,6 +1,5 @@
 package AppsWithGUIs;
 
-import javafx.application.Application;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
@@ -25,31 +24,119 @@ import javafx.scene.effect.ColorAdjust;
 import javax.imageio.ImageIO;
 import java.io.*;
 
-public class MemeMaker extends Application {
+/**
+ * Some problems I'm having right now are being able to change the color and radius
+ * of the brush, and undoing nodes.
+ *
+ * You can't change a local (method?) variable via a lambda expression, and making the brush
+ * color and radius global variables would make any changes to them affect other windows
+ * of the same program. I need to be able to change its color and radius and have that
+ * action be independent of anything that goes on in other windows.
+ * -- solved this buy using two global arrayLists: brushColors and brushRadii, a counter variable
+ * -- that keeps track of all the windows made, and a method variable for each window
+ * -- that represents the number of that window.
+ *
+ * -- ^^ this comment is obsolete now! Now, MemeMaker is a class, and MemeMakerMain makes an object of
+ * -- type MemeMaker. The way to get around the pesky lambda expressions was to use instance variables.
+ * -- Now, brushRadius and brushColor are instance variable. i.e. no longer static.
+ *
+ * Also, I currently have the undo button designed to remove any circle from the pane.
+ * I did this so that the undo would remove a whole stroke instead of a singular circle.
+ * This raises a problem: If i have two different strokes, the undo action will remove
+ * booth strokes instead of the most recent one. It is intended for the undo button to
+ * remove the most recent addition to the pane.
+ */
+public class MemeMaker {
 
-    private int counter = 1; //to keep track of the memes made
+    private static int windowsOpened;
 
-    public static void main(String[] args)
-    {
-        launch(args);
+    private Color brushColor;
+    private double brushRadius;
+    private int windowNumber;
+
+    private Image image = null;
+    private ImageView imageView = null;
+    private TextArea textArea;
+    private Pane pane;
+
+    //make the ColorAdjust object for the saturation, hue, brightness, and contrast
+    private ColorAdjust colorAdjust = new ColorAdjust();
+
+    //make a Glow object
+    private Glow glow = new Glow(0.0);
+
+    //make a MotionBlur object
+    private MotionBlur motionBlur = new MotionBlur();
+
+    private VBox glowVBox;
+    private VBox saturationVBox;
+    private VBox hueVBox;
+    private VBox brightnessVBox;
+    private VBox contrastVBox;
+    private VBox motionBlurAngleVBox;
+    private VBox motionBlurRadiusVBox;
+
+    private MenuBar menuBar;
+
+    public MemeMaker() {
+        windowsOpened++;
+        brushColor = Color.BLACK;
+        brushRadius = 25.0;
+        windowNumber = windowsOpened - 1;
     }
 
-    @Override
-    public void start(Stage primaryStage)
+    public void makeStage(Stage stage)
     {
-        makeStage(primaryStage);
+        // build the primaryStage
+        makePane(stage);
+
+        // build the menu bar
+        makeMenuBar(stage);
+
+        //make a BorderPane for everything to go in
+        BorderPane borderPane = new BorderPane();
+
+        // build the controls for the effects
+        makeEffectsControls();
+
+        //add the effects to the image
+        glow.setInput(motionBlur);
+        colorAdjust.setInput(glow);
+        imageView.setEffect(colorAdjust);
+
+        //create an HBox for all the sliders
+        HBox sliderHBox = new HBox(glowVBox, saturationVBox, hueVBox, brightnessVBox, contrastVBox, motionBlurAngleVBox, motionBlurRadiusVBox);
+
+        //create a VBox for the sliderHBox and TextArea
+        VBox vbox = new VBox(5, textArea, sliderHBox);
+
+        //create an HBox for all the vbox and pane
+        HBox hbox = new HBox(10, vbox, pane);
+        hbox.setPadding(new Insets(10));
+        hbox.setFillHeight(false); //we do this so that the pane doesn't fit to the height of the pane. It stays at the height we set it at.
+        hbox.setAlignment(Pos.CENTER);
+
+        // add stuff to the border pane
+        borderPane.setTop(menuBar);
+        borderPane.setCenter(hbox);
+
+        Scene scene = new Scene(borderPane);
+        stage.setScene(scene);
+        stage.setTitle("Meme-it!");
+        stage.show();
     }
 
-    void makeStage(Stage stage)
-    {
-        //variable for the radius of the brush
-        double brushRadius = 25.0;
-
-        Image image = null;
-        ImageView imageView = null;
+    /**
+     * This method initializes the TextArea, lets the user choose the image for the ImageView, initializes the pane,
+     * and adds event handlers for when the user clicks the pane and when the user drags the mouse
+     * @param stage - The window for everything to be built on
+     */
+    void makePane(Stage stage) {
+        //Image image = null;
+        //ImageView imageView = null;
 
         //make a text field for the user to type what they want on the photo
-        TextArea textArea = new TextArea("Type text here that you want to put on the image. Then click where you want" +
+        textArea = new TextArea("Type text here that you want to put on the image. Then click where you want" +
                 "the text.");
         textArea.setWrapText(true);
 
@@ -72,7 +159,7 @@ public class MemeMaker extends Application {
             imageView.setPreserveRatio(true);
         }
 
-        Pane pane = new Pane(imageView);
+        pane = new Pane(imageView);
         //we set the prefSize to center the image and prevent the text from pushing the image
         pane.setPrefSize(imageView.getFitWidth(), imageView.getFitWidth() * image.getHeight() / image.getWidth());
 
@@ -83,8 +170,12 @@ public class MemeMaker extends Application {
             double mouseX = event.getSceneX() - pane.getLayoutX();
             double mouseY = event.getSceneY() - pane.getLayoutY();
 
+            //double brushRadius = brushRadii.get(windowNumber);
+            //Color brushColor = brushColors.get(windowNumber);
+
             //make a circle object
             Circle circle = new Circle(mouseX, mouseY, brushRadius);
+            circle.setFill(brushColor);
 
             //add the object to the pane
             pane.getChildren().add(circle);
@@ -103,18 +194,16 @@ public class MemeMaker extends Application {
             text.setFill(Color.WHITE);
             pane.getChildren().add(text);
         });
+    }
 
-        //make the ColorAdjust object for the saturation, hue, brightness, and contrast
-        ColorAdjust colorAdjust = new ColorAdjust();
-
-        //make a Glow object
-        Glow glow = new Glow(0.0);
-
-        //make a MotionBlur object
-        MotionBlur motionBlur = new MotionBlur();
-
+    /**
+     * This method makes a menu bar; a file menu with new, reset, save, and undo options, and;
+     * a brush menu with options for the brush's color and size
+     * @param stage - The window for everything to be built in
+     */
+    public void makeMenuBar(Stage stage) {
         //make a MenuBar
-        MenuBar menuBar = new MenuBar();
+        menuBar = new MenuBar();
 
         //make the File menu
         Menu fileMenu = new Menu("File");
@@ -128,7 +217,8 @@ public class MemeMaker extends Application {
         //add an event handler for the newItem
         newItem.setOnAction(event ->
         {
-            makeStage(new Stage());
+            new MemeMaker().makeStage(new Stage());
+            //makeStage(new Stage());
         });
 
         //add an event handler for the resetItem
@@ -192,12 +282,100 @@ public class MemeMaker extends Application {
         //add the MenuItem's to the fileMenu
         fileMenu.getItems().addAll(newItem, resetItem, saveItem, undoItem);
 
+        //make a menu for the brush
+        Menu brushMenu = new Menu("Brush");
+
+        //make a submenu for the color of the brush
+        Menu colorMenu = new Menu("Color");
+
+        // make a menuitem for the colorMenu for each color
+        MenuItem redItem = new MenuItem("Red");
+        MenuItem blueItem = new MenuItem("Blue");
+        MenuItem yellowItem = new MenuItem("Yellow");
+        MenuItem blackItem = new MenuItem("Black");
+        MenuItem whiteItem = new MenuItem("White");
+
+        redItem.setOnAction(event ->
+        {
+            //brushColor = Color.RED;
+            //setRedBrush(brushColor);
+            //brushColors.set(windowNumber, Color.RED);
+            brushColor = Color.RED;
+        });
+
+        blueItem.setOnAction(event ->
+        {
+            //brushColors.set(windowNumber, Color.BLUE);
+            brushColor = Color.BLUE;
+        });
+
+        yellowItem.setOnAction(event ->
+        {
+            //brushColors.set(windowNumber, Color.YELLOW);
+            brushColor = Color.YELLOW;
+        });
+
+        blackItem.setOnAction(event ->
+        {
+            //brushColors.set(windowNumber, Color.BLACK);
+            brushColor = Color.BLACK;
+        });
+
+        whiteItem.setOnAction(event ->
+        {
+            //brushColors.set(windowNumber, Color.WHITE);
+            brushColor = Color.WHITE;
+        });
+
+        // add the color items to the color sub menu
+        colorMenu.getItems().add(redItem);
+        colorMenu.getItems().add(blueItem);
+        colorMenu.getItems().add(yellowItem);
+        colorMenu.getItems().add(blackItem);
+        colorMenu.getItems().add(whiteItem);
+
+        // make a submenu for the size of the brish
+        Menu sizeMenu = new Menu("Size");
+
+        MenuItem smallItem = new MenuItem("Small");
+        MenuItem mediumItem = new MenuItem("Medium");
+        MenuItem largeItem = new MenuItem("Large");
+
+        smallItem.setOnAction(event ->
+        {
+            //brushRadii.set(windowNumber, 5.0);
+            brushRadius = 5.0;
+        });
+
+        mediumItem.setOnAction(event ->
+        {
+            //brushRadii.set(windowNumber, 15.0);
+            brushRadius = 15.0;
+        });
+
+        largeItem.setOnAction(event ->
+        {
+            //brushRadii.set(windowNumber, 25.0);
+            brushRadius = 25.0;
+        });
+
+        sizeMenu.getItems().addAll(smallItem, mediumItem, largeItem);
+
+        // add the color submenu to the brush menu
+        brushMenu.getItems().addAll(colorMenu, sizeMenu);
+
         //add the fileMenu to the menuBar
         menuBar.getMenus().add(fileMenu);
 
-        //make a BorderPane for everything to go in
-        BorderPane borderPane = new BorderPane();
+        //add the brushMenu to the menuBar
+        menuBar.getMenus().add(brushMenu);
+    }
 
+    /**
+     * This method creates the controls for the glow, saturation, hue, brightness, contrast,
+     * motionBlue angle and motionBlue radius.
+     */
+    public void makeEffectsControls() {
         //create the glow controls
         Label glowLabel = new Label("Glow: ");
         glowLabel.setPrefWidth(75);
@@ -210,7 +388,7 @@ public class MemeMaker extends Application {
         glowSlider.setOrientation(Orientation.VERTICAL);
 
         //create VBox for the glow controls
-        VBox glowVBox = new VBox(5, glowLabel, glowSlider);
+        glowVBox = new VBox(5, glowLabel, glowSlider);
         glowVBox.setAlignment(Pos.CENTER);
 
         //create the saturation controls
@@ -225,7 +403,7 @@ public class MemeMaker extends Application {
         saturationSlider.setOrientation(Orientation.VERTICAL);
 
         //create VBox for the saturation controls
-        VBox saturationVBox = new VBox(5, saturationLabel, saturationSlider);
+        saturationVBox = new VBox(5, saturationLabel, saturationSlider);
         saturationVBox.setAlignment(Pos.CENTER);
 
         //create the hue controls
@@ -240,7 +418,7 @@ public class MemeMaker extends Application {
         hueSlider.setOrientation(Orientation.VERTICAL);
 
         //create VBox for the Hue controls
-        VBox hueVBox = new VBox(5, hueLabel, hueSlider);
+        hueVBox = new VBox(5, hueLabel, hueSlider);
         hueVBox.setAlignment(Pos.CENTER);
 
         //create the brightness controls
@@ -255,7 +433,7 @@ public class MemeMaker extends Application {
         brightnessSlider.setOrientation(Orientation.VERTICAL);
 
         //create VBox for the brightness conrtols
-        VBox brightnessVBox = new VBox(5, brightnessLabel, brightnessSlider);
+        brightnessVBox = new VBox(5, brightnessLabel, brightnessSlider);
         brightnessVBox.setAlignment(Pos.CENTER);
 
         //create the contrast controls
@@ -270,7 +448,7 @@ public class MemeMaker extends Application {
         contrastSlider.setOrientation(Orientation.VERTICAL);
 
         //create a VBox for the contrast controls
-        VBox contrastVBox = new VBox(5, contrastLabel, contrastSlider);
+        contrastVBox = new VBox(5, contrastLabel, contrastSlider);
         contrastVBox.setAlignment(Pos.CENTER);
 
         //create the MotionBlur controls
@@ -297,10 +475,10 @@ public class MemeMaker extends Application {
         motionBlurRadiusSlider.setOrientation(Orientation.VERTICAL);
 
         //put the motion blur sliders in their own vbox's
-        VBox motionBlurAngleVBox = new VBox(5, motionBlurAngleLabel, motionBlurAngleSlider);
+        motionBlurAngleVBox = new VBox(5, motionBlurAngleLabel, motionBlurAngleSlider);
         motionBlurAngleVBox.setAlignment(Pos.CENTER);
 
-        VBox motionBlurRadiusVBox = new VBox(5, motionBlurRadiusLabel, motionBlurRadiusSlider);
+        motionBlurRadiusVBox = new VBox(5, motionBlurRadiusLabel, motionBlurRadiusSlider);
         motionBlurRadiusVBox.setAlignment(Pos.CENTER);
 
         //register event handler for the glowSlider
@@ -363,35 +541,16 @@ public class MemeMaker extends Application {
             motionBlurRadiusLabel.setText(String.format("Motion blur radius: %.2f", value));
             motionBlur.setRadius(value);
         }));
-
-        //add the effects to the image
-        glow.setInput(motionBlur);
-        colorAdjust.setInput(glow);
-        imageView.setEffect(colorAdjust);
-
-        //create an HBox for all the sliders
-        HBox sliderHBox = new HBox(glowVBox, saturationVBox, hueVBox, brightnessVBox, contrastVBox, motionBlurAngleVBox, motionBlurRadiusVBox);
-
-        //create a VBox for the sliderHBox and TextArea
-        VBox vbox = new VBox(5, textArea, sliderHBox);
-
-        //create an HBox for all the vbox and pane
-        HBox hbox = new HBox(10, vbox, pane);
-        hbox.setPadding(new Insets(10));
-        hbox.setFillHeight(false); //we do this so that the pane doesn't fit to the height of the pane. It stays at the height we set it at.
-        hbox.setAlignment(Pos.CENTER);
-
-        borderPane.setTop(menuBar);
-        borderPane.setCenter(hbox);
-
-        Scene scene = new Scene(borderPane);
-        stage.setScene(scene);
-        stage.setTitle("Meme-it!");
-        stage.show();
     }
 
     //make a recursive method to remove "drawn" circles with the brush
-    void removeDrawing(int index, Pane pane)
+
+    /**
+     * This method recursively goes through the elements of the Pane to remove the last element added
+     * @param index - The size of the array holding the Pane's children
+     * @param pane - The pane whose children the method will remove
+     */
+    public void removeDrawing(int index, Pane pane)
     {
         if(pane.getChildren().size() > 1) // if the Pane holds something other than the ImageView
         {
